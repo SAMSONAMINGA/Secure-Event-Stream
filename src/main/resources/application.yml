@@ -1,0 +1,121 @@
+spring:
+  application:
+    name: transaction-kafka-system
+
+  # ── Database ────────────────────────────────────────────────────────────────
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/transactions}
+    username: ${DB_USERNAME:user}
+    password: ${DB_PASSWORD:password}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}   # use 'create-drop' for local dev, 'validate' in prod
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        use_sql_comments: false
+
+  # ── Kafka ────────────────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: transaction-processors
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    producer:
+      retries: 3
+
+# ── Application Topics ─────────────────────────────────────────────────────────
+kafka:
+  topic:
+    transactions: ${KAFKA_TOPIC_TRANSACTIONS:transactions}
+
+# ── JWT — secret MUST be set via environment variable ──────────────────────────
+jwt:
+  secret: ${JWT_SECRET}                     # required; generate: openssl rand -base64 64
+  expiration-ms: ${JWT_EXPIRATION_MS:3600000}  # 1 hour default
+  issuer: ${JWT_ISSUER:transaction-system}
+
+# ── Fraud Detection Thresholds ─────────────────────────────────────────────────
+fraud:
+  amount-threshold: ${FRAUD_AMOUNT_THRESHOLD:10000}
+  velocity-window-minutes: ${FRAUD_VELOCITY_WINDOW_MINUTES:10}
+  velocity-max-count: ${FRAUD_VELOCITY_MAX_COUNT:10}
+  daily-volume-cap: ${FRAUD_DAILY_VOLUME_CAP:50000}
+
+# ── Actuator ────────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      show-components: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+# ── OpenAPI / Swagger ───────────────────────────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+  info:
+    title: Transaction Processing API
+    description: Production-grade event-driven transaction system
+    version: "1.0"
+
+# ── Resilience4j ────────────────────────────────────────────────────────────────
+resilience4j:
+  retry:
+    instances:
+      kafkaProducer:
+        max-attempts: 3
+        wait-duration: 1s
+        exponential-backoff-multiplier: 2.0
+        retry-exceptions:
+          - org.apache.kafka.common.errors.TimeoutException
+          - org.springframework.kafka.KafkaException
+
+# ── Logging ─────────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.example.transaction: ${LOG_LEVEL:INFO}
+    org.springframework.kafka: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{ISO8601} [%thread] %-5level %logger{36} - %msg%n"
+
+---
+# ── Local development overrides ─────────────────────────────────────────────────
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+
+logging:
+  level:
+    com.example.transaction: DEBUG
