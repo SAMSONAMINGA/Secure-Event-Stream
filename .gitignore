@@ -1,6 +1,7 @@
 # ── Secrets (NEVER commit these) ──────────────────────────────────────────────
 .env
 *.env.local
+.env.example
 
 # ── Maven build output ─────────────────────────────────────────────────────────
 target/
